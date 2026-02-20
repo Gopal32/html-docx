@@ -54,19 +54,27 @@ function generateContentTypesFragments(contentTypesXML, type, objects) {
   }
 }
 
-function generateSectionReferenceXML(documentXML, documentSectionType, objects, isEnabled) {
-  if (isEnabled && objects && Array.isArray(objects) && objects.length) {
-    const xmlFragment = fragment();
+function generateSectionReferenceXML(
+  documentSectionType,
+  objects,
+  isEnabled,
+  sectionPropertiesFragment
+) {
+  if (
+    isEnabled &&
+    objects &&
+    Array.isArray(objects) &&
+    objects.length &&
+    sectionPropertiesFragment
+  ) {
     objects.forEach(({ relationshipId, type }) => {
       const objectFragment = fragment({ namespaceAlias: { w: namespaces.w, r: namespaces.r } })
         .ele('@w', `${documentSectionType}Reference`)
         .att('@r', 'id', `rId${relationshipId}`)
         .att('@w', 'type', type)
         .up();
-      xmlFragment.import(objectFragment);
+      sectionPropertiesFragment.import(objectFragment);
     });
-
-    documentXML.root().first().first().import(xmlFragment);
   }
 }
 
@@ -206,32 +214,53 @@ class DocxDocument {
     );
     
     documentXML.root().first().import(this.documentXML);
-    console.log("---------documentXML.toString({ prettyPrint: true })----", documentXML.root().first());
+    const sectionPropertiesFragment = fragment({ namespaceAlias: { w: namespaces.w, r: namespaces.r } })
+      .ele('@w', 'sectPr')
+      .ele('@w', 'pgSz')
+      .att('@w', 'w', this.width)
+      .att('@w', 'h', this.height)
+      .att('@w', 'orient', this.orientation)
+      .up()
+      .ele('@w', 'pgMar')
+      .att('@w', 'top', this.margins.top)
+      .att('@w', 'right', this.margins.right)
+      .att('@w', 'bottom', this.margins.bottom)
+      .att('@w', 'left', this.margins.left)
+      .att('@w', 'header', this.margins.header)
+      .att('@w', 'footer', this.margins.footer)
+      .att('@w', 'gutter', this.margins.gutter)
+      .up();
 
-    generateSectionReferenceXML(documentXML, 'header', this.headerObjects, this.header);
-    generateSectionReferenceXML(documentXML, 'footer', this.footerObjects, this.footer);
+    generateSectionReferenceXML(
+      'header',
+      this.headerObjects,
+      this.header,
+      sectionPropertiesFragment
+    );
+    generateSectionReferenceXML(
+      'footer',
+      this.footerObjects,
+      this.footer,
+      sectionPropertiesFragment
+    );
 
     if ((this.header || this.footer) && this.skipFirstHeaderFooter) {
-      documentXML
-        .root()
-        .first()
-        .first()
-        .import(fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'titlePg'));
+      sectionPropertiesFragment.import(
+        fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'titlePg')
+      );
     }
     if (this.lineNumber) {
       const { countBy, start, restart } = this.lineNumber;
-      documentXML
-        .root()
-        .first()
-        .first()
-        .import(
-          fragment({ namespaceAlias: { w: namespaces.w } })
-            .ele('@w', 'lnNumType')
-            .att('@w', 'countBy', countBy)
-            .att('@w', 'start', start)
-            .att('@w', 'restart', restart)
-        );
+      sectionPropertiesFragment.import(
+        fragment({ namespaceAlias: { w: namespaces.w } })
+          .ele('@w', 'lnNumType')
+          .att('@w', 'countBy', countBy)
+          .att('@w', 'start', start)
+          .att('@w', 'restart', restart)
+      );
     }
+
+    documentXML.root().first().import(sectionPropertiesFragment);
     
     return documentXML.toString({ prettyPrint: true });
   }
@@ -318,6 +347,18 @@ class DocxDocument {
     return generateXMLString(generateThemeXML(this.font));
   }
 
+  resolveListStyleType(properties) {
+    const style = properties && properties.style;
+    if (!style) {
+      return undefined;
+    }
+    if (typeof style === 'string') {
+      const match = style.match(/list-style-type\s*:\s*([^;]+)/i);
+      return match ? match[1].trim() : undefined;
+    }
+    return style['list-style-type'] || style.listStyleType;
+  }
+
   generateNumberingXML() {
     const numberingXML = create(
       { encoding: 'UTF-8', standalone: true },
@@ -350,9 +391,7 @@ class DocxDocument {
             '@w',
             'val',
             type === 'ol'
-              ? this.ListStyleBuilder.getListStyleType(
-                  properties.style && properties.style['list-style-type']
-                )
+              ? this.ListStyleBuilder.getListStyleType(this.resolveListStyleType(properties))
               : 'bullet'
           )
           .up()
@@ -360,7 +399,12 @@ class DocxDocument {
           .att(
             '@w',
             'val',
-            type === 'ol' ? this.ListStyleBuilder.getListPrefixSuffix(properties.style, level) : ''
+            type === 'ol'
+              ? this.ListStyleBuilder.getListPrefixSuffix(
+                  { 'list-style-type': this.resolveListStyleType(properties) },
+                  level
+                )
+              : ''
           )
           .up()
           .ele('@w', 'lvlJc')
@@ -458,12 +502,14 @@ class DocxDocument {
 
   createMediaFile(base64String) {
     // eslint-disable-next-line no-useless-escape
-    const matches = base64String.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-    if (matches.length !== 3) {
+    const matches = base64String
+      .trim()
+      .match(/^data:([A-Za-z-+\/]+);base64,\s*([\s\S]+)$/);
+    if (!matches || matches.length !== 3) {
       throw new Error('Invalid base64 string');
     }
 
-    const base64FileContent = matches[2];
+    const base64FileContent = matches[2].replace(/\s+/g, '');
     // matches array contains file type in base64 format - image/jpeg and base64 stringified data
     const fileExtension =
       matches[1].match(/\/(.*?)$/)[1] === 'octet-stream' ? 'png' : matches[1].match(/\/(.*?)$/)[1];

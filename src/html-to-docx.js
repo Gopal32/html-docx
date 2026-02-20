@@ -203,8 +203,6 @@ async function addFilesToContainer(
     .file(themeFileNameWithExt, docxDocument.generateThemeXML(), {
       createFolders: false,
     });
-// console.log("-------------docxDocument.generateDocumentXML()------------", docxDocument.generateDocumentXML());
-
   zip
     .folder(wordFolder)
     .file('document.xml', docxDocument.generateDocumentXML(), { createFolders: false })

@@ -278,6 +278,21 @@ const fixupColumnWidth = (columnWidthString) => {
   }
 };
 
+const resolveColumnWidth = (columnWidthString, tableWidth) => {
+  if (!columnWidthString) {
+    return undefined;
+  }
+  if (typeof columnWidthString === 'number') {
+    return columnWidthString;
+  }
+  if (percentageRegex.test(columnWidthString) && tableWidth) {
+    percentageRegex.lastIndex = 0;
+    const percentageValue = columnWidthString.match(percentageRegex)[1];
+    return Math.round((percentageValue / 100) * tableWidth);
+  }
+  return fixupColumnWidth(columnWidthString);
+};
+
 // eslint-disable-next-line consistent-return
 const fixupMargin = (marginString) => {
   if (pointRegex.test(marginString)) {
@@ -334,6 +349,15 @@ const modifiedStyleAttributesBuilder = (docxDocumentInstance, vNode, attributes,
     }
     if (vNode.properties.style['font-size']) {
       modifiedAttributes.fontSize = fixupFontSize(vNode.properties.style['font-size']);
+    }
+    if (vNode.properties.style['text-decoration']) {
+      const textDecoration = vNode.properties.style['text-decoration'];
+      if (textDecoration.includes('line-through')) {
+        modifiedAttributes.strike = true;
+      }
+      if (textDecoration.includes('underline')) {
+        modifiedAttributes.u = true;
+      }
     }
     if (vNode.properties.style['line-height']) {
       modifiedAttributes.lineHeight = fixupLineHeight(
@@ -528,6 +552,11 @@ const buildRun = async (vNode, attributes, docxDocumentInstance) => {
               break;
             case 'u':
               tempAttributes.u = true;
+              break;
+            case 'strike':
+            case 'del':
+            case 's':
+              tempAttributes.strike = true;
               break;
             case 'sub':
               tempAttributes.sub = true;
@@ -1524,9 +1553,24 @@ const buildTableGrid = (vNode, attributes) => {
   const tableGridFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'tblGrid');
   if (vNodeHasChildren(vNode)) {
     const gridColumns = vNode.children.filter((childVNode) => childVNode.tagName === 'col');
-    const gridWidth = attributes.maximumWidth / gridColumns.length;
+    const tableWidth = attributes.width || attributes.maximumWidth;
+    const columnWidths = gridColumns.map((columnVNode) => {
+      const columnStyleWidth = columnVNode.properties?.style?.width;
+      const columnAttrWidth = columnVNode.properties?.attributes?.width;
+      return resolveColumnWidth(columnStyleWidth || columnAttrWidth, tableWidth);
+    });
+    const totalSpecifiedWidth = columnWidths.reduce(
+      (sum, width) => sum + (width || 0),
+      0
+    );
+    const unspecifiedCount = columnWidths.filter((width) => !width).length;
+    const fallbackWidth =
+      totalSpecifiedWidth > 0 && unspecifiedCount
+        ? Math.max(Math.round((tableWidth - totalSpecifiedWidth) / unspecifiedCount), 0)
+        : Math.round(tableWidth / gridColumns.length);
 
     for (let index = 0; index < gridColumns.length; index++) {
+      const gridWidth = columnWidths[index] || fallbackWidth;
       const tableGridColFragment = buildTableGridCol(gridWidth);
       tableGridFragment.import(tableGridColFragment);
     }
@@ -1539,16 +1583,39 @@ const buildTableGrid = (vNode, attributes) => {
 const buildTableGridFromTableRow = (vNode, attributes) => {
   const tableGridFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'tblGrid');
   if (vNodeHasChildren(vNode)) {
-    const numberOfGridColumns = vNode.children.reduce((accumulator, childVNode) => {
+    const tableWidth = attributes.width || attributes.maximumWidth;
+    const columnWidths = vNode.children.reduce((accumulator, childVNode) => {
       const colSpan =
         childVNode.properties.colSpan ||
         (childVNode.properties.style && childVNode.properties.style['column-span']);
+      const spanCount = colSpan ? parseInt(colSpan) : 1;
+      const cellStyleWidth = childVNode.properties?.style?.width;
+      const cellAttrWidth = childVNode.properties?.attributes?.width;
+      const resolvedWidth = resolveColumnWidth(cellStyleWidth || cellAttrWidth, tableWidth);
+      if (resolvedWidth && spanCount > 1) {
+        const perColWidth = Math.round(resolvedWidth / spanCount);
+        for (let index = 0; index < spanCount; index++) {
+          accumulator.push(perColWidth);
+        }
+      } else {
+        for (let index = 0; index < spanCount; index++) {
+          accumulator.push(resolvedWidth);
+        }
+      }
+      return accumulator;
+    }, []);
+    const totalSpecifiedWidth = columnWidths.reduce(
+      (sum, width) => sum + (width || 0),
+      0
+    );
+    const unspecifiedCount = columnWidths.filter((width) => !width).length;
+    const fallbackWidth =
+      totalSpecifiedWidth > 0 && unspecifiedCount
+        ? Math.max(Math.round((tableWidth - totalSpecifiedWidth) / unspecifiedCount), 0)
+        : Math.round(tableWidth / columnWidths.length);
 
-      return accumulator + (colSpan ? parseInt(colSpan) : 1);
-    }, 0);
-    const gridWidth = attributes.maximumWidth / numberOfGridColumns;
-
-    for (let index = 0; index < numberOfGridColumns; index++) {
+    for (let index = 0; index < columnWidths.length; index++) {
+      const gridWidth = columnWidths[index] || fallbackWidth;
       const tableGridColFragment = buildTableGridCol(gridWidth);
       tableGridFragment.import(tableGridColFragment);
     }
