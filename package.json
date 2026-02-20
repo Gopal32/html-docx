@@ -1,6 +1,6 @@
 {
   "name": "advanced-html-to-docx",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Convert HTML content to DOCX with full style support",
   "keywords": [
     "html",
@@ -9,8 +9,8 @@
     "word",
     "office"
   ],
-  "main": "dist/html-to-docx.cjs.js",
-  "module": "dist/html-to-docx.esm.js",
+  "main": "dist/advanced-html-to-docx.cjs.js",
+  "module": "dist/advanced-html-to-docx.esm.js",
   "types": "dist/index.d.ts",
   "files": [
     "dist"
