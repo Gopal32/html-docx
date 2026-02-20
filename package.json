@@ -1,6 +1,6 @@
 {
   "name": "advanced-html-to-docx",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Convert HTML content to DOCX with full style support",
   "keywords": [
     "html",
