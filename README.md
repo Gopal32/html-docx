@@ -1,7 +1,7 @@
-html-to-docx
+advanced-advanced-html-to-docx
 ============
 
-html-to-docx converts HTML content to a DOCX file. It runs in Node.js and produces a buffer/blob that you can write to disk.
+advanced-html-to-docx converts HTML content to a DOCX file. It runs in Node.js and produces a buffer/blob that you can write to disk.
 
 ## Installation
 

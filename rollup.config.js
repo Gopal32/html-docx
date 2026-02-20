@@ -1,26 +1,29 @@
-import resolve from '@rollup/plugin-node-resolve'
-import commonjs from '@rollup/plugin-commonjs'
-import json from '@rollup/plugin-json'
-import { terser } from 'rollup-plugin-terser'
+const { nodeResolve } = require('@rollup/plugin-node-resolve')
+const commonjs = require('@rollup/plugin-commonjs')
+const json = require('@rollup/plugin-json')
 
-export default {
-  input: 'src/index.js', // <-- change if your entry is different
+module.exports = {
+  input: 'src/index.js',
+  external: [
+    ...Object.keys(require('./package.json').dependencies || {}),
+    ...require('module').builtinModules
+  ],
   output: [
     {
       file: 'dist/advanced-html-to-docx.cjs.js',
       format: 'cjs',
-      sourcemap: true
+      sourcemap: false,
+      exports: 'auto'
     },
     {
       file: 'dist/advanced-html-to-docx.esm.js',
       format: 'esm',
-      sourcemap: true
+      sourcemap: false
     }
   ],
   plugins: [
-    resolve(),
+    nodeResolve({ preferBuiltins: true }),
     commonjs(),
-    json(),
-    terser()
+    json()
   ]
 }
